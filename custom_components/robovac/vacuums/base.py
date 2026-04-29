@@ -70,3 +70,4 @@ class RobovacModelDetails(Protocol):
     commands: Dict[RobovacCommand, Any]
     dps_codes: Dict[str, str] = {}  # Optional model-specific DPS codes
     activity_mapping: Dict[str, VacuumActivity] | None = None
+    needs_wakeup: bool = False  # Whether the device needs a UDP wakeup broadcast

@@ -450,6 +450,16 @@ class RoboVacEntity(StateVacuumEntity):
             },
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        await super().async_added_to_hass()
+        # Provide the hass instance to the underlying TuyaDevice so it can
+        # use HA's network component for wakeup broadcasts.
+        if self.vacuum is not None:
+            self.vacuum._hass = self.hass
+        # Trigger an immediate update to fetch data as soon as possible
+        self.async_schedule_update_ha_state(True)
+
     async def async_update(self) -> None:
         """Synchronize state from the vacuum.
 

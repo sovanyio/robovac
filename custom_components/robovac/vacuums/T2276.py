@@ -11,6 +11,7 @@ from .base import RoboVacEntityFeature, RobovacCommand, RobovacModelDetails
 
 class T2276(RobovacModelDetails):
     protocol_version = 3.5
+    needs_wakeup = True
     homeassistant_features = (
         VacuumEntityFeature.FAN_SPEED
         | VacuumEntityFeature.LOCATE

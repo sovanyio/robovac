@@ -864,6 +864,7 @@ class TuyaDevice:
         self._backoff = False
         self._queue_interval = INITIAL_QUEUE_TIME
         self._failures = 0
+        self._hass = None  # Set by the entity after it is added to HA
 
         asyncio.create_task(self.process_queue())
 
@@ -973,6 +974,22 @@ class TuyaDevice:
                 await asyncio.sleep(wait)
             self._last_connect_attempt = time.time()
 
+        # Send wakeup broadcast for devices that require it (e.g., T2276).
+        # The device may be in deep sleep with its TCP listener disabled.
+        # A UDP broadcast on port 7000 wakes it up so the TCP connection
+        # can succeed.
+        if getattr(self.model_details, 'needs_wakeup', False):
+            from .tuyawakeup import async_send_wakeup_broadcast
+            sent = await async_send_wakeup_broadcast(
+                hass=self._hass, target_ip=self.host,
+            )
+            if sent:
+                self._LOGGER.debug(
+                    "Sent wakeup broadcast for %s, waiting for device to wake",
+                    self,
+                )
+                await asyncio.sleep(1.0)
+
         self._LOGGER.debug("Connecting to {}".format(self))
         try:
             self.reader, self.writer = await asyncio.wait_for(
@@ -992,6 +1009,11 @@ class TuyaDevice:
                 # clean disconnect (EOF) doesn't compound with prior failures.
                 self._failures = 0
                 self._backoff = False
+                
+                # If the device requires a wakeup command, request a full state poll
+                # after successfully negotiating the session key.
+                if getattr(self.model_details, 'needs_wakeup', False):
+                    await self._async_request_dps_update()
             except Exception as e:
                 self._LOGGER.error("Session key negotiation failed: %s", e)
                 await self.async_disconnect()
@@ -1218,17 +1240,32 @@ class TuyaDevice:
     async def _async_request_dps_update(self, dps_ids: list[str] | None = None) -> None:
         """Request the device to send updated DPS values.
 
-        Sends UPDATEDPS (0x12) which asks the device to push the current
-        values for the specified DPS IDs.  This is how TinyTuya retrieves
-        state from v3.4+/v3.5 devices that don't respond to DP_QUERY.
+        Sends GET_COMMAND_NEW (0x10) or UPDATEDPS (0x12) which asks the device 
+        to push the current values for the specified DPS IDs.
         """
-        if dps_ids:
-            payload_dict = {"dpId": [int(d) for d in dps_ids]}
+        t = int(time.time())
+        if self.version >= (3, 4):
+            if dps_ids:
+                dps_map = {str(d): None for d in dps_ids}
+            else:
+                dps_map = self._dps_to_request()
+            # Try GET_COMMAND_NEW with protocol 5 envelope (since SET uses it)
+            payload_dict = {
+                "protocol": 5,
+                "t": t,
+                "data": {"dps": dps_map}
+            }
+            cmd = Message.GET_COMMAND_NEW
         else:
-            payload_dict = {"dpId": [int(d) for d in self._dps_to_request()]}
+            if dps_ids:
+                payload_dict = {"dpId": [str(d) for d in dps_ids]}
+            else:
+                payload_dict = {"dpId": [str(d) for d in self._dps_to_request()]}
+            cmd = Message.UPDATEDPS
+            
         payload_bytes = json.dumps(payload_dict).encode('utf-8')
         message = Message(
-            Message.UPDATEDPS,
+            cmd,
             payload_bytes,
             encrypt=True,
             device=self,
