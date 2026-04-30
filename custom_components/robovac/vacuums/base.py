@@ -60,7 +60,6 @@ class TuyaCodes(StrEnum):
     CLEANING_AREA = "110"
     BOOST_IQ = "118"
     ROOM_CLEAN = "124"
-    STATION = "126"
     AUTO_RETURN = "135"
     ACTIVITY_LOG = "142"
 

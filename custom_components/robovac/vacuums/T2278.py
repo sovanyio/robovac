@@ -4,6 +4,7 @@ from .base import RoboVacEntityFeature, RobovacCommand, RobovacModelDetails
 
 
 class T2278(RobovacModelDetails):
+    dps_codes = {"STATION": "126"}  # SES self-empty station
     homeassistant_features = (
         VacuumEntityFeature.CLEAN_SPOT
         | VacuumEntityFeature.FAN_SPEED
