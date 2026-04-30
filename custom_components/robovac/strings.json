@@ -38,13 +38,27 @@
                 "title": "Edit vacuum",
                 "data": {
                     "autodiscovery": "Enable autodiscovery",
-                    "ip_address": "IP Address"
+                    "ip_address": "IP Address",
+                    "maps": "Map Name Mapping (YAML)",
+                    "rooms": "Room Name Mapping (YAML)"
                 },
                 "data_description": {
                     "autodiscovery": "Automatically find the vacuum on the network.",
-                    "ip_address": "The static IP address of your vacuum on your local network (optional if autodiscovery is enabled)."
+                    "ip_address": "The static IP address of your vacuum on your local network (optional if autodiscovery is enabled).",
+                    "maps": "Define your Map IDs and their friendly names in YAML.\n\nExample:\ndefault: Downstairs\nMapB: Upstairs",
+                    "rooms": "Define your rooms grouped by Map Name in YAML.\n\nExample:\nDownstairs:\n  123: Kitchen\n  124: Living Room\nUpstairs:\n  10: Bedroom"
                 },
-                "description": "Autodiscovery will automatically update the IP address"
+                "description": "Configure your Map IDs and Room IDs using YAML for the clean_room service."
+            }
+        }
+    },
+    "entity": {
+        "time": {
+            "do_not_disturb_start": {
+                "name": "Do Not Disturb Start"
+            },
+            "do_not_disturb_end": {
+                "name": "Do Not Disturb End"
             }
         }
     }

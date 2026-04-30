@@ -44,8 +44,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import selector
 
-from .const import CONF_AUTODISCOVERY, CONF_VACS, DOMAIN
+from .const import CONF_AUTODISCOVERY, CONF_VACS, DOMAIN, CONF_ROOMS, CONF_MAPS
 from .countries import (
     get_phone_code_by_country_code,
     get_phone_code_by_region,
@@ -283,6 +284,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 updated_vacuums[self.selected_vacuum][CONF_IP_ADDRESS] = user_input[
                     CONF_IP_ADDRESS
                 ]
+            
+            updated_vacuums[self.selected_vacuum][CONF_ROOMS] = user_input.get(CONF_ROOMS, "")
+            updated_vacuums[self.selected_vacuum][CONF_MAPS] = user_input.get(CONF_MAPS, "")
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
@@ -301,6 +305,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_IP_ADDRESS,
                     default=vacuums[self.selected_vacuum].get(CONF_IP_ADDRESS),
                 ): str,
+                vol.Optional(
+                    CONF_MAPS,
+                    default=vacuums[self.selected_vacuum].get(CONF_MAPS, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_ROOMS,
+                    default=vacuums[self.selected_vacuum].get(CONF_ROOMS, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             }
         )
 

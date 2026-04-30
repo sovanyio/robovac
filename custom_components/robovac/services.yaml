@@ -1,0 +1,30 @@
+clean_room:
+  name: Clean Room
+  description: Clean a specific room by its name and map.
+  target:
+    entity:
+      domain: vacuum
+  fields:
+    map_name:
+      name: Map Name
+      description: The name of the map as defined in the integration options.
+      required: true
+      example: "Downstairs"
+      selector:
+        text:
+    room_name:
+      name: Room Name
+      description: The name of the room as defined in the integration options.
+      required: true
+      example: "Kitchen"
+      selector:
+        text:
+    count:
+      name: Clean Count
+      description: Number of times to clean the room.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1

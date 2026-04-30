@@ -22,6 +22,7 @@ import base64
 from datetime import timedelta
 from enum import StrEnum
 import json
+import yaml
 import logging
 import time
 from typing import Any, cast
@@ -47,7 +48,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
-from .const import CONF_VACS, DOMAIN, PING_RATE, REFRESH_RATE, TIMEOUT
+from .const import CONF_VACS, DOMAIN, PING_RATE, REFRESH_RATE, TIMEOUT, CONF_ROOMS, CONF_MAPS
 from .errors import getErrorMessage
 from .vacuums.base import RobovacCommand, RoboVacEntityFeature, TuyaCodes, TUYA_CONSUMABLES_CODES
 from .robovac import ModelNotSupportedException, RoboVac
@@ -84,6 +85,23 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Initialize my test integration 2 config entry."""
+    # Register custom services
+    async def async_clean_room_service(call: Any) -> None:
+        """Handle the clean_room service call."""
+        target_entities = call.data.get("entity_id", [])
+        map_name = call.data.get("map_name")
+        room_name = call.data.get("room_name")
+        count = call.data.get("count", 1)
+
+        for entity_id in target_entities:
+            entity = hass.data[DOMAIN][CONF_VACS].get(entity_id.split(".")[-1])
+            if entity and hasattr(entity, "async_clean_room"):
+                await entity.async_clean_room(map_name, room_name, count)
+
+    hass.services.async_register(
+        DOMAIN, "clean_room", async_clean_room_service
+    )
+
     vacuums = config_entry.data[CONF_VACS]
     for item in vacuums:
         item = vacuums[item]
@@ -418,6 +436,26 @@ class RoboVacEntity(StateVacuumEntity):
 
         self.config_item = item
         
+        # Parse room and map mappings
+        self._room_mapping_raw = item.get(CONF_ROOMS, "")
+        self._map_mapping_raw = item.get(CONF_MAPS, "")
+        self._room_map_dict: dict[str, dict[str, str]] = {}
+        self._map_id_dict: dict[str, str] = {}
+        
+        try:
+            if self._room_mapping_raw:
+                self._room_map_dict = yaml.safe_load(self._room_mapping_raw) or {}
+            
+            if self._map_mapping_raw:
+                # Map Mapping: { "MapID": "FriendlyName" }
+                self._map_id_dict = yaml.safe_load(self._map_mapping_raw) or {}
+                # Invert it for lookup: { "FriendlyName": "MapID" }
+                self._map_name_to_id = {v.lower(): k for k, v in self._map_id_dict.items()}
+            else:
+                self._map_name_to_id = {}
+
+        except Exception as e:
+            _LOGGER.error("Failed to parse YAML mappings: %s", e)
 
         # Initialize the RoboVac connection
         try:
@@ -1043,6 +1081,44 @@ class RoboVacEntity(StateVacuumEntity):
             # and the vacuum ignores the start command.
             await asyncio.sleep(1)
             await self.vacuum.async_set({TuyaCodes.START_PAUSE: True})
+
+    async def async_clean_room(self, map_name: str, room_name: str, count: int = 1) -> None:
+        """Service call to clean a specific room by name."""
+        if not self._room_map_dict:
+            _LOGGER.error("No room mapping configured for %s", self._attr_name)
+            return
+
+        # Find the map and room IDs
+        room_id = None
+        target_map = map_name.lower()
+        target_room = room_name.lower()
+        
+        # 🗺️ Resolve Map ID
+        map_id = self._map_name_to_id.get(target_map, map_name) # Fallback to original if not found
+        current_map = self.tuyastatus.get("128", "default")
+        
+        if map_id != current_map:
+            _LOGGER.info("Switching map for %s: %s -> %s", self._attr_name, current_map, map_id)
+            await self.vacuum.async_set({"128": map_id})
+            # Give the vacuum a moment to switch maps
+            await asyncio.sleep(2)
+
+        # 🎯 Resolve Room ID
+        for m_name, rooms in self._room_map_dict.items():
+            if m_name.lower() == target_map:
+                for r_id, r_name in rooms.items():
+                    if r_name.lower() == target_room:
+                        room_id = r_id
+                        break
+            if room_id:
+                break
+        
+        if room_id:
+            _LOGGER.info("Cleaning room %s (ID: %s) on map %s (ID: %s)", room_name, room_id, map_name, map_id)
+            # Use the existing room_clean logic
+            await self.async_send_command("room_clean", {"room_ids": [int(room_id)], "count": count})
+        else:
+            _LOGGER.error("Room '%s' not found on map '%s' for %s", room_name, map_name, self._attr_name)
 
     async def async_will_remove_from_hass(self) -> None:
         """Handle removal from Home Assistant."""
