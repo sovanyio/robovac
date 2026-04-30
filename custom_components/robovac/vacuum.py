@@ -1106,6 +1106,68 @@ class RoboVacEntity(StateVacuumEntity):
         _LOGGER.debug("async_get_segments called. Returning: %s", res)
         return res or []
 
+    async def async_clean_segments(self, segment_ids: list[str], **kwargs: Any) -> None:
+        """Clean specific segments (rooms)."""
+        if not segment_ids:
+            return
+
+        _LOGGER.debug("async_clean_segments called with: %s", segment_ids)
+
+        # 1. Group segments by map_id
+        # Our segment_id is formatted as "map_id:room_id"
+        rooms_by_map: dict[str, list[int]] = {}
+        for sid in segment_ids:
+            if ":" in sid:
+                map_id, room_id = sid.split(":", 1)
+                if map_id not in rooms_by_map:
+                    rooms_by_map[map_id] = []
+                rooms_by_map[map_id].append(int(room_id))
+            else:
+                # Fallback for IDs without map prefix (if any)
+                if "default" not in rooms_by_map:
+                    rooms_by_map["default"] = []
+                rooms_by_map["default"].append(int(sid))
+
+        if not rooms_by_map:
+            _LOGGER.warning("No valid segment IDs found in %s", segment_ids)
+            return
+
+        # 2. Process the maps
+        # Note: Eufy vacuums generally clean rooms on the CURRENTLY active map.
+        # We pick the first map found in segment_ids to act on.
+        map_id = list(rooms_by_map.keys())[0]
+        room_ids = rooms_by_map[map_id]
+
+        # 3. Check if we need to switch maps
+        # The map ID is usually stored in DPS 128
+        current_map = self.tuyastatus.get("128", "default")
+        if map_id != "default" and map_id != current_map:
+            _LOGGER.info("Switching map for area cleaning: %s -> %s", current_map, map_id)
+            await self.vacuum.async_set({"128": map_id})
+            # Give the vacuum a moment to switch maps and stabilize
+            await asyncio.sleep(2)
+
+        # 4. Trigger the cleaning
+        # The T2276 uses selectRoomsClean via DPS 124
+        _LOGGER.info("Area cleaning started for rooms %s on map %s", room_ids, map_id)
+        
+        method_call = {
+            "method": "selectRoomsClean",
+            "data": {"roomIds": room_ids, "cleanTimes": 1},
+            "timestamp": round(time.time() * 1000),
+        }
+        json_str = json.dumps(method_call, separators=(",", ":"))
+        base64_str = base64.b64encode(json_str.encode("utf8")).decode("utf8")
+        
+        # Send room selection
+        await self.vacuum.async_set({TuyaCodes.ROOM_CLEAN: base64_str})
+        
+        # Small delay to ensure the room selection is processed before the start command
+        await asyncio.sleep(1)
+        
+        # Send start command (DPS 2)
+        await self.vacuum.async_set({TuyaCodes.START_PAUSE: True})
+
     async def async_clean_room(self, map_name: str, room_name: str, count: int = 1) -> None:
         """Service call to clean a specific room by name."""
         if not self._room_map_dict:
