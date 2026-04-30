@@ -974,21 +974,7 @@ class TuyaDevice:
                 await asyncio.sleep(wait)
             self._last_connect_attempt = time.time()
 
-        # Send wakeup broadcast for devices that require it (e.g., T2276).
-        # The device may be in deep sleep with its TCP listener disabled.
-        # A UDP broadcast on port 7000 wakes it up so the TCP connection
-        # can succeed.
-        if getattr(self.model_details, 'needs_wakeup', False):
-            from .tuyawakeup import async_send_wakeup_broadcast
-            sent = await async_send_wakeup_broadcast(
-                hass=self._hass, target_ip=self.host,
-            )
-            if sent:
-                self._LOGGER.debug(
-                    "Sent wakeup broadcast for %s, waiting for device to wake",
-                    self,
-                )
-                await asyncio.sleep(1.0)
+
 
         self._LOGGER.debug("Connecting to {}".format(self))
         try:
@@ -1009,9 +995,8 @@ class TuyaDevice:
                 # clean disconnect (EOF) doesn't compound with prior failures.
                 self._failures = 0
                 self._backoff = False
-                
-                # If the device requires a wakeup command, request a full state poll
-                # after successfully negotiating the session key.
+
+                # Request a full state poll after successfully negotiating the session key.
                 if getattr(self.model_details, 'needs_wakeup', False):
                     await self._async_request_dps_update()
             except Exception as e:
@@ -1179,12 +1164,11 @@ class TuyaDevice:
         have cached state, use those keys; otherwise request common DPS
         codes for the device model.
         """
+        # Always request common DPS codes plus any known keys.
+        dps_map = {str(k): None for k in [2, 5, 15, 101, 102, 103, 104, 106]}
         if self._dps:
-            return {k: None for k in self._dps}
-        # Request common DPS codes that T2276 and similar vacuums use.
-        # This is better than requesting DPS 1 which doesn't exist on
-        # most vacuum models.
-        return {str(k): None for k in [2, 5, 15, 101, 102, 103, 104, 106]}
+            dps_map.update({str(k): None for k in self._dps})
+        return dps_map
 
     async def async_get(self) -> None:
         """Get the current state of the device.
@@ -1192,24 +1176,27 @@ class TuyaDevice:
         This method retrieves the current state of the device.
         """
         if self.version >= (3, 4):
-            # v3.5 devices reject all known GET/query commands:
-            # - DP_QUERY (0x0a) → "json obj data unvalid"
-            # - DP_QUERY_NEW (0x10) → same
-            # - UPDATEDPS (0x12) → empty ACK, no DPS data (tested with
-            #   valid DPS IDs [2,5,15,101,102,103,104,106] — still empty)
-            #
-            # The only way to get DPS state is via gratuitous updates (0x08)
-            # the device sends after SET commands.  So just stay connected.
-            await self.async_connect()
-            return
-        payload_dict = {"gwId": self.gateway_id, "devId": self.device_id}
-        payload_bytes = json.dumps(payload_dict).encode('utf-8')
-        encrypt = False if self.version < (3, 3) else True
-        message = Message(Message.GET_COMMAND, payload_bytes, encrypt=encrypt, device=self)
+            # v3.5 devices accept an empty JSON object for DP_QUERY_NEW
+            # The response will have its own sequence number, so it will be 
+            # picked up by the async_gratuitous_update_state handler automatically.
+            cmd = Message.GET_COMMAND_NEW
+            payload_bytes = b"{}"
+            encrypt = True
+            expect_resp = False
+        else:
+            payload_dict = {"gwId": self.gateway_id, "devId": self.device_id}
+            payload_bytes = json.dumps(payload_dict).encode('utf-8')
+            cmd = Message.GET_COMMAND
+            encrypt = False if self.version < (3, 3) else True
+            expect_resp = True
+
+        message = Message(cmd, payload_bytes, encrypt=encrypt, device=self, expect_response=expect_resp)
         self._queue.append(message)
-        response = await self.async_receive(message)
-        if response is not None:
-            await self.async_update_state(response)
+        
+        if expect_resp:
+            response = await self.async_receive(message)
+            if response is not None:
+                await self.async_update_state(response)
 
     async def async_set(self, dps: dict[str, Any]) -> None:
         """Set the state of the device.
@@ -1245,22 +1232,13 @@ class TuyaDevice:
         """
         t = int(time.time())
         if self.version >= (3, 4):
-            if dps_ids:
-                dps_map = {str(d): None for d in dps_ids}
-            else:
-                dps_map = self._dps_to_request()
-            # Try GET_COMMAND_NEW with protocol 5 envelope (since SET uses it)
-            payload_dict = {
-                "protocol": 5,
-                "t": t,
-                "data": {"dps": dps_map}
-            }
-            cmd = Message.GET_COMMAND_NEW
+            payload_dict = {"gwId": self.device_id, "devId": self.device_id}
+            cmd = Message.GET_COMMAND
         else:
             if dps_ids:
                 payload_dict = {"dpId": [str(d) for d in dps_ids]}
             else:
-                payload_dict = {"dpId": [str(d) for d in self._dps_to_request()]}
+                payload_dict = {"dpId": [str(d) for d in self._dps_to_request().keys()]}
             cmd = Message.UPDATEDPS
             
         payload_bytes = json.dumps(payload_dict).encode('utf-8')
@@ -1284,11 +1262,14 @@ class TuyaDevice:
         if self._backoff is True:
             self._LOGGER.debug("Currently in backoff, not adding ping to queue")
         elif self.version >= (3, 5):
-            # v3.5 devices (like T2276) don't support Tuya heartbeats — they
-            # close the TCP connection after receiving any ping, regardless of
-            # format.  Skip heartbeats entirely; the device will naturally EOF
-            # when idle, and process_queue will drive reconnection.
-            pass
+            # v3.5 devices (like T2276) don't support standard Tuya 0x09 heartbeats.
+            # Instead of letting the device idle and EOF, we mimic the official Eufy
+            # app by actively polling the vacuum state. This keeps the TCP socket hot
+            # and prevents the ~60s idle timeout disconnection.
+            self.last_ping = time.time()
+            # Reset pong immediately since we don't expect a standard pong response
+            self.last_pong = time.time() 
+            await self.async_get()
         else:
             self.last_ping = time.time()
             encrypt = False if self.version < (3, 3) else True
@@ -1321,6 +1302,17 @@ class TuyaDevice:
         This method handles a gratuitous update state message from the device.
         """
         await self.async_update_state(state_message)
+        
+        # Suppress Home Assistant state updates if the message ONLY contains noisy diagnostics
+        if state_message.payload and isinstance(state_message.payload, dict):
+            payload = state_message.payload
+            dps = payload.get("data", {}).get("dps") if "data" in payload else payload.get("dps")
+            if dps:
+                # 115 = Hardware/Lidar Telemetry, 142 = Activity Log Events
+                noisy_keys = {"115", "142"}
+                if all(str(k) in noisy_keys for k in dps.keys()):
+                    return
+
         await self.update_entity_state_cb()
 
     async def async_update_state(self, state_message: Message, _: Any = None) -> None:

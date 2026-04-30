@@ -11,7 +11,7 @@ from .base import RoboVacEntityFeature, RobovacCommand, RobovacModelDetails
 
 class T2276(RobovacModelDetails):
     protocol_version = 3.5
-    needs_wakeup = True
+
     homeassistant_features = (
         VacuumEntityFeature.FAN_SPEED
         | VacuumEntityFeature.LOCATE
@@ -43,6 +43,7 @@ class T2276(RobovacModelDetails):
                 "small_room": "SmallRoom",
                 "spot": "Spot",
                 "edge": "Edge",
+                "room": "room",
                 "nosweep": "Nosweep",
             },
         },
@@ -59,7 +60,7 @@ class T2276(RobovacModelDetails):
                 "pure": "Quiet",
                 "standard": "Standard",
                 "turbo": "Turbo",
-                "boost": "Boost",
+                "boost": "Max",
             },
         },
         RobovacCommand.LOCATE: {
