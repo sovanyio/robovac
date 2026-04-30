@@ -996,9 +996,6 @@ class TuyaDevice:
                 self._failures = 0
                 self._backoff = False
 
-                # Request a full state poll after successfully negotiating the session key.
-                if getattr(self.model_details, 'needs_wakeup', False):
-                    await self._async_request_dps_update()
             except Exception as e:
                 self._LOGGER.error("Session key negotiation failed: %s", e)
                 await self.async_disconnect()
@@ -1308,8 +1305,8 @@ class TuyaDevice:
             payload = state_message.payload
             dps = payload.get("data", {}).get("dps") if "data" in payload else payload.get("dps")
             if dps:
-                # 115 = Hardware/Lidar Telemetry, 142 = Activity Log Events
-                noisy_keys = {"115", "142"}
+                # 115 = Hardware/Lidar Telemetry
+                noisy_keys = {"115"}
                 if all(str(k) in noisy_keys for k in dps.keys()):
                     return
 
