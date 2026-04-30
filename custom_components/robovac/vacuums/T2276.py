@@ -28,6 +28,7 @@ class T2276(RobovacModelDetails):
         | RoboVacEntityFeature.CLEANING_TIME
         | RoboVacEntityFeature.CLEANING_AREA
         | RoboVacEntityFeature.ROOM
+        | RoboVacEntityFeature.CONSUMABLES
     )
     commands = {
         RobovacCommand.START_PAUSE: {
@@ -76,6 +77,9 @@ class T2276(RobovacModelDetails):
         RobovacCommand.DO_NOT_DISTURB: {
             "code": 107,
         },
+        RobovacCommand.DO_NOT_DISTURB_SCHEDULE: {
+            "code": 139,
+        },
         RobovacCommand.CLEANING_TIME: {
             "code": 109,
         },
@@ -84,5 +88,8 @@ class T2276(RobovacModelDetails):
         },
         RobovacCommand.BOOST_IQ: {
             "code": 118,
+        },
+        RobovacCommand.CONSUMABLES: {
+            "code": 116,
         },
     }

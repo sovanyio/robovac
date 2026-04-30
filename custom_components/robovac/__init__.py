@@ -25,7 +25,7 @@ from .const import CONF_VACS, DOMAIN
 
 from .tuyalocaldiscovery import TuyaLocalDiscovery
 
-PLATFORMS = [Platform.VACUUM, Platform.SENSOR]
+PLATFORMS = [Platform.VACUUM, Platform.SENSOR, Platform.SWITCH, Platform.SELECT, Platform.BINARY_SENSOR, Platform.TIME]
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -83,6 +83,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # All platforms are now set up. Dispatch the signal to dynamically load model-specific sensors.
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+    vacuums = entry.data.get(CONF_VACS, {})
+    for item_id, item_config in vacuums.items():
+        async_dispatcher_send(hass, f"robovac_{item_id}_setup_sensors", item_config)
 
     return True
 

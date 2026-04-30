@@ -45,6 +45,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
 from .const import CONF_VACS, DOMAIN, PING_RATE, REFRESH_RATE, TIMEOUT
 from .errors import getErrorMessage
@@ -66,6 +67,7 @@ ATTR_DO_NOT_DISTURB = "do_not_disturb"
 ATTR_BOOST_IQ = "boost_iq"
 ATTR_CONSUMABLES = "consumables"
 ATTR_MODE = "mode"
+ATTR_STATION = "station"
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=REFRESH_RATE)
@@ -118,6 +120,12 @@ class RoboVacEntity(StateVacuumEntity):
     _attr_activity_mapping: dict[str, VacuumActivity] | None = None
     _attr_error_code: int | str | None = None
     _attr_tuya_state: int | str | None = None
+    _attr_battery_percent: int | None = None
+
+    @property
+    def battery_percent(self) -> int | None:
+        """Return the battery percent of the vacuum cleaner."""
+        return self._attr_battery_percent
 
     @property
     def robovac_supported(self) -> int | None:
@@ -138,6 +146,25 @@ class RoboVacEntity(StateVacuumEntity):
     def consumables(self) -> str | None:
         """Return the consumables status of the vacuum cleaner."""
         return self._attr_consumables
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.has_data_or_connected
+
+    @property
+    def has_data_or_connected(self) -> bool:
+        """Return True if we have state data or are connected."""
+        if self.vacuum is None:
+            return False
+        if self.tuyastatus:
+            return True
+        return self.vacuum._connected
+
+    @property
+    def station(self) -> dict[str, Any] | None:
+        """Return the station sensors data of the vacuum cleaner."""
+        return self._attr_station
 
     @property
     def cleaning_area(self) -> str | None:
@@ -346,8 +373,12 @@ class RoboVacEntity(StateVacuumEntity):
             and self.consumables
         ):
             data[ATTR_CONSUMABLES] = self.consumables
+        if self.station:
+            data[ATTR_STATION] = self.station
         if self.mode:
             data[ATTR_MODE] = self.mode
+        if self._attr_event_log:
+            data["event_log"] = self._attr_event_log
         return data
 
     def __init__(self, item: dict[str, Any]) -> None:
@@ -378,9 +409,15 @@ class RoboVacEntity(StateVacuumEntity):
         self.tuyastatus: dict[str, Any] | None = None
         self._last_no_data_warning_time: float = 0
         self._no_data_warning_logged: bool = False
+        self._attr_connected_once: bool = False
         self._consumables_codes_cache: list[str] | None = None
         self._dps_codes_memo: dict[str, str] = {}
         self._last_consumable_data: str | None = None
+        self._last_station_data: str | None = None
+        self._last_event_data: str | None = None
+
+        self.config_item = item
+        
 
         # Initialize the RoboVac connection
         try:
@@ -438,6 +475,8 @@ class RoboVacEntity(StateVacuumEntity):
         # Initialize additional attributes
         self._attr_mode = None
         self._attr_consumables = None
+        self._attr_station = None
+        self._attr_event_log: list[dict[str, Any]] = []
 
         # Set up device info for Home Assistant device registry
         self._attr_device_info = DeviceInfo(
@@ -457,6 +496,7 @@ class RoboVacEntity(StateVacuumEntity):
         # use HA's network component for wakeup broadcasts.
         if self.vacuum is not None:
             self.vacuum._hass = self.hass
+
         # Trigger an immediate update to fetch data as soon as possible
         self.async_schedule_update_ha_state(True)
 
@@ -520,6 +560,8 @@ class RoboVacEntity(StateVacuumEntity):
         """
         self.update_entity_values()
         self.async_write_ha_state()
+        # Notify sub-entities to update
+        async_dispatcher_send(self.hass, f"robovac_{self._attr_unique_id}_updated")
 
     def update_entity_values(self) -> None:
         """Update entity values from the vacuum's data points.
@@ -650,9 +692,17 @@ class RoboVacEntity(StateVacuumEntity):
         if self.tuyastatus is None:
             return
 
-        # Get state and error code from data points using model-specific DPS codes
+        # Get state, error code, and battery level from data points using model-specific DPS codes
         tuya_state = self.tuyastatus.get(self.get_dps_code("STATUS"))
         error_code = self.tuyastatus.get(self.get_dps_code("ERROR_CODE"))
+        battery_level = self.tuyastatus.get(self.get_dps_code("BATTERY_LEVEL"))
+
+        # Update battery attribute
+        if battery_level is not None:
+            try:
+                self._attr_battery_percent = int(battery_level)
+            except (ValueError, TypeError):
+                pass
 
         # Update state attribute
         if tuya_state is not None and self.vacuum is not None:
@@ -733,6 +783,20 @@ class RoboVacEntity(StateVacuumEntity):
             boost_iq = self.tuyastatus.get(self.get_dps_code("BOOST_IQ"))
             self._attr_boost_iq = str(boost_iq) if boost_iq is not None else None
 
+        # Handle station data
+        station_code = self.get_dps_code("STATION")
+        station_data = self.tuyastatus.get(station_code)
+        if isinstance(station_data, str) and station_data:
+            if getattr(self, "_last_station_data", None) != station_data:
+                self._last_station_data = station_data
+                try:
+                    self._attr_station = json.loads(
+                        base64.b64decode(station_data).decode("utf-8")
+                    )
+                except Exception as e:
+                    _LOGGER.warning("Failed to decode station data: %s", str(e))
+                    self._attr_station = None
+
         # Handle consumables
         if (
             isinstance(self.robovac_supported, int)
@@ -763,6 +827,35 @@ class RoboVacEntity(StateVacuumEntity):
                                     self._attr_consumables = consumables["consumable"]["duration"]
                             except Exception as e:
                                 _LOGGER.warning("Failed to decode consumable data: %s", str(e))
+
+        # Handle event log (DPS 142)
+        event_code = self.get_dps_code("EVENT")
+        if not event_code:
+            event_code = "142"
+        event_data = self.tuyastatus.get(event_code)
+        if isinstance(event_data, str) and event_data:
+            if getattr(self, "_last_event_data", None) != event_data:
+                self._last_event_data = event_data
+                try:
+                    event_json = json.loads(
+                        base64.b64decode(event_data).decode("utf-8")
+                    )
+                    if "ev" in event_json:
+                        ev_data = event_json["ev"]
+                        self._attr_event_log.append(ev_data)
+                        
+                        # 💡 ROOM ID DISCOVERY: Specifically look for the room ID in start_clean events
+                        if "start_clean" in ev_data and "id" in ev_data["start_clean"]:
+                            room_id = ev_data["start_clean"]["id"]
+                            _LOGGER.info(
+                                "🎯 FOUND ROOM ID: The vacuum started cleaning room with ID: %s", 
+                                room_id
+                            )
+                        # Keep the log bounded (e.g. last 50 events)
+                        if len(self._attr_event_log) > 50:
+                            self._attr_event_log = self._attr_event_log[-50:]
+                except Exception as e:
+                    _LOGGER.warning("Failed to decode event data: %s", str(e))
 
     async def async_locate(self, **kwargs: Any) -> None:
         """Locate the vacuum cleaner.
