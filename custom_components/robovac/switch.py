@@ -55,6 +55,9 @@ async def async_setup_entry(
             if vacuum_entity.get_dps_code("activity_log"):
                 switches.append(RobovacBase64Switch(config_item, "Activity Log Telemetrics", "activity_log", "switch"))
 
+            if vacuum_entity.get_dps_code(RobovacCommand.DO_NOT_DISTURB_SCHEDULE):
+                switches.append(RobovacDndScheduleSwitch(config_item))
+
             if switches:
                 async_add_entities(switches)
 
@@ -322,6 +325,93 @@ class RobovacBase64Switch(RestoreEntity, SwitchEntity):
             
         except Exception as ex:
             _LOGGER.error("Failed to set Base64 switch %s for %s: %s", self._attr_name, self.robovac_id, ex)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the switch on."""
+        await self._async_set_state(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the switch off."""
+        await self._async_set_state(False)
+
+
+class RobovacDndScheduleSwitch(RestoreEntity, SwitchEntity):
+    """Switch for Do Not Disturb scheduling."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_should_poll = False
+
+    def __init__(self, item: dict[str, Any]) -> None:
+        """Initialize the switch."""
+        self.robovac_id = item[CONF_ID]
+        self._attr_unique_id = f"{item[CONF_ID]}_dnd_schedule_switch"
+        self._attr_name = "Do Not Disturb Scheduling"
+        self._attr_is_on = False
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, item[CONF_ID])},
+            name=item[CONF_NAME]
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, f"robovac_{self.robovac_id}_updated", self.async_write_ha_state
+            )
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        vacuum_entity: RoboVacEntity | None = self.hass.data[DOMAIN][CONF_VACS].get(self.robovac_id)
+        if vacuum_entity:
+            return vacuum_entity.has_data_or_connected
+        return False
+
+    def _get_raw_schedule_string(self) -> str:
+        """Get the raw 9-character schedule string (e.g. 100002359)"""
+        vacuum_entity: RoboVacEntity | None = self.hass.data[DOMAIN][CONF_VACS].get(self.robovac_id)
+        if not vacuum_entity:
+            return "100002359"
+
+        dps_code = vacuum_entity.get_dps_code(RobovacCommand.DO_NOT_DISTURB_SCHEDULE)
+        if not dps_code or not vacuum_entity.vacuum:
+            return "100002359"
+
+        b64_val = vacuum_entity.vacuum._dps.get(dps_code)
+        if b64_val:
+            try:
+                padded_val = str(b64_val) + "=" * (-len(str(b64_val)) % 4)
+                val = base64.b64decode(padded_val).decode('utf-8')
+                if len(val) == 9:
+                    return val
+            except Exception:
+                pass
+        return "100002359"
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if schedule is enabled."""
+        raw_val = self._get_raw_schedule_string()
+        return raw_val[0] == "1"
+
+    async def _async_set_state(self, state: bool) -> None:
+        raw_val = self._get_raw_schedule_string()
+        start_end = raw_val[1:] if len(raw_val) == 9 else "00002359"
+        new_raw_val = f"{'1' if state else '0'}{start_end}"
+        
+        b64_encoded = base64.b64encode(new_raw_val.encode('utf-8')).decode('utf-8')
+
+        vacuum_entity: RoboVacEntity | None = self.hass.data[DOMAIN][CONF_VACS].get(self.robovac_id)
+        if vacuum_entity and vacuum_entity.vacuum:
+            dps_code = vacuum_entity.get_dps_code(RobovacCommand.DO_NOT_DISTURB_SCHEDULE)
+            if dps_code:
+                await vacuum_entity.vacuum.async_set({dps_code: b64_encoded})
+                self._attr_is_on = state
+                self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""

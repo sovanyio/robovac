@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.time import TimeEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME, CONF_ID
+from homeassistant.const import CONF_NAME, CONF_ID, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -48,6 +48,7 @@ class RobovacDndTimeBase(RestoreEntity, TimeEntity):
     """Base class for Do Not Disturb Time entities."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_should_poll = False
 
     def __init__(self, item: dict[str, Any], name: str, is_start: bool) -> None:
@@ -85,10 +86,6 @@ class RobovacDndTimeBase(RestoreEntity, TimeEntity):
         """Return True if entity is available."""
         vacuum_entity: RoboVacEntity | None = self.hass.data[DOMAIN][CONF_VACS].get(self.robovac_id)
         if not vacuum_entity or not vacuum_entity.has_data_or_connected:
-            return False
-            
-        # Hide scheduling if Do Not Disturb is entirely disabled
-        if vacuum_entity.do_not_disturb is not None and not vacuum_entity._is_value_true(vacuum_entity.do_not_disturb):
             return False
             
         return True

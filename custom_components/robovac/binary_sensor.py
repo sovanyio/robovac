@@ -61,6 +61,7 @@ class RobovacChargingSensor(RestoreEntity, BinarySensorEntity):
 
     _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.BATTERY_CHARGING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = True
 
     def __init__(self, item: dict[str, Any]) -> None:
@@ -108,6 +109,7 @@ class RobovacStationBinarySensor(RestoreEntity, BinarySensorEntity):
     """Binary sensor for station-specific states (Collecting, etc)."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = True
 
     def __init__(self, item: dict[str, Any], name: str, active_states: list[str]) -> None:

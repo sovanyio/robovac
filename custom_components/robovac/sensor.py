@@ -73,7 +73,6 @@ class RobovacBatterySensor(RestoreEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.BATTERY
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_should_poll = True
 
@@ -125,6 +124,7 @@ class RobovacStationSensor(RestoreEntity, SensorEntity):
     """Representation of a Eufy RoboVac Station Sensor."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_should_poll = True
 
     def __init__(self, item: dict[str, Any], name: str, data_path: list[str]) -> None:
@@ -205,8 +205,8 @@ class RobovacConsumableSensor(RestoreEntity, SensorEntity):
     """Representation of a Eufy RoboVac Consumable Sensor."""
 
     _attr_has_entity_name = True
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
     def __init__(self, item: dict[str, Any], name: str, key: str, max_hours: int) -> None:
