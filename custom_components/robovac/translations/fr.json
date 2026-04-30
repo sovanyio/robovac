@@ -37,14 +37,42 @@
             "edit": {
                 "title": "Modifier l'aspirateur",
                 "data": {
-                    "autodiscovery": "Activer la découverte automatique",
-                    "ip_address": "Adresse IP"
+                    "autodiscovery": "Activer l'autodécouverte",
+                    "ip_address": "Adresse IP",
+                    "action": "Configuration de la cartographie"
                 },
                 "data_description": {
                     "autodiscovery": "Trouver automatiquement l'aspirateur sur le réseau.",
-                    "ip_address": "L'adresse IP statique de votre aspirateur sur votre réseau local (optionnel si la découverte automatique est activée)."
-                },
-                "description": "La découverte automatique mettra à jour automatiquement l'adresse IP"
+                    "ip_address": "L'adresse IP statique de votre aspirateur sur votre réseau local (facultatif si l'autodécouverte est activée).",
+                    "action": "Choisissez de sauvegarder vos paramètres ou de gérer vos mappages d'ID de carte et de pièce."
+                }
+            },
+            "manage_maps": {
+                "title": "Gérer les cartes",
+                "data": {
+                    "action": "Action de carte"
+                }
+            },
+            "edit_map": {
+                "title": "Modifier la carte",
+                "data": {
+                    "map_id": "ID de carte",
+                    "map_name": "Nom de la carte",
+                    "manage_rooms": "Gérer les pièces pour cette carte"
+                }
+            },
+            "manage_rooms": {
+                "title": "Gérer les pièces",
+                "data": {
+                    "action": "Action de pièce"
+                }
+            },
+            "edit_room": {
+                "title": "Modifier la pièce",
+                "data": {
+                    "room_id": "ID de pièce",
+                    "room_name": "Nom de la pièce"
+                }
             }
         }
     }

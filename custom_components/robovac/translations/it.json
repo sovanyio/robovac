@@ -37,14 +37,42 @@
             "edit": {
                 "title": "Modifica aspirapolvere",
                 "data": {
-                    "autodiscovery": "Abilita rilevamento automatico",
-                    "ip_address": "Indirizzo IP"
+                    "autodiscovery": "Abilita autodiscovery",
+                    "ip_address": "Indirizzo IP",
+                    "action": "Configurazione della mappatura"
                 },
                 "data_description": {
                     "autodiscovery": "Trova automaticamente l'aspirapolvere sulla rete.",
-                    "ip_address": "L'indirizzo IP statico del tuo aspirapolvere sulla tua rete locale (opzionale se il rilevamento automatico è abilitato)."
-                },
-                "description": "Il rilevamento automatico aggiornerà automaticamente l'indirizzo IP"
+                    "ip_address": "L'indirizzo IP statico dell'aspirapolvere sulla rete locale (opzionale se l'autodiscovery è abilitato).",
+                    "action": "Scegli se salvare le impostazioni o gestire le mappature degli ID mappa e stanza."
+                }
+            },
+            "manage_maps": {
+                "title": "Gestisci mappe",
+                "data": {
+                    "action": "Azione mappa"
+                }
+            },
+            "edit_map": {
+                "title": "Modifica mappa",
+                "data": {
+                    "map_id": "ID mappa",
+                    "map_name": "Nome mappa",
+                    "manage_rooms": "Gestisci stanze per questa mappa"
+                }
+            },
+            "manage_rooms": {
+                "title": "Gestisci stanze",
+                "data": {
+                    "action": "Azione stanza"
+                }
+            },
+            "edit_room": {
+                "title": "Modifica stanza",
+                "data": {
+                    "room_id": "ID stanza",
+                    "room_name": "Nome stanza"
+                }
             }
         }
     }

@@ -38,13 +38,41 @@
                 "title": "Staubsauger bearbeiten",
                 "data": {
                     "autodiscovery": "Autodiscovery aktivieren",
-                    "ip_address": "IP-Adresse"
+                    "ip_address": "IP-Adresse",
+                    "action": "Mapping-Konfiguration"
                 },
                 "data_description": {
                     "autodiscovery": "Den Staubsauger automatisch im Netzwerk finden.",
-                    "ip_address": "Die statische IP-Adresse Ihres Staubsaugers in Ihrem lokalen Netzwerk (optional, wenn Autodiscovery aktiviert ist)."
-                },
-                "description": "Autodiscovery aktualisiert die IP-Adresse automatisch"
+                    "ip_address": "Die statische IP-Adresse Ihres Staubsaugers in Ihrem lokalen Netzwerk (optional, wenn Autodiscovery aktiviert ist).",
+                    "action": "Wählen Sie aus, ob Sie Ihre Einstellungen speichern oder Ihre Karten- und Raum-ID-Zuordnungen verwalten möchten."
+                }
+            },
+            "manage_maps": {
+                "title": "Karten verwalten",
+                "data": {
+                    "action": "Karten-Aktion"
+                }
+            },
+            "edit_map": {
+                "title": "Karte bearbeiten",
+                "data": {
+                    "map_id": "Karten-ID",
+                    "map_name": "Kartenname",
+                    "manage_rooms": "Räume für diese Karte verwalten"
+                }
+            },
+            "manage_rooms": {
+                "title": "Räume verwalten",
+                "data": {
+                    "action": "Raum-Aktion"
+                }
+            },
+            "edit_room": {
+                "title": "Raum bearbeiten",
+                "data": {
+                    "room_id": "Raum-ID",
+                    "room_name": "Raumname"
+                }
             }
         }
     }

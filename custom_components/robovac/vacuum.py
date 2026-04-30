@@ -22,7 +22,6 @@ import base64
 from datetime import timedelta
 from enum import StrEnum
 import json
-import yaml
 import logging
 import time
 from typing import Any, cast
@@ -31,6 +30,7 @@ from homeassistant.components.vacuum import (
     StateVacuumEntity,
     VacuumActivity,
     VacuumEntityFeature,
+    Segment,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -48,7 +48,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 
-from .const import CONF_VACS, DOMAIN, PING_RATE, REFRESH_RATE, TIMEOUT, CONF_ROOMS, CONF_MAPS
+from .const import CONF_VACS, DOMAIN, PING_RATE, REFRESH_RATE, TIMEOUT
 from .errors import getErrorMessage
 from .vacuums.base import RobovacCommand, RoboVacEntityFeature, TuyaCodes, TUYA_CONSUMABLES_CODES
 from .robovac import ModelNotSupportedException, RoboVac
@@ -437,25 +437,17 @@ class RoboVacEntity(StateVacuumEntity):
         self.config_item = item
         
         # Parse room and map mappings
-        self._room_mapping_raw = item.get(CONF_ROOMS, "")
-        self._map_mapping_raw = item.get(CONF_MAPS, "")
         self._room_map_dict: dict[str, dict[str, str]] = {}
-        self._map_id_dict: dict[str, str] = {}
+        self._map_name_to_id: dict[str, str] = {}
         
-        try:
-            if self._room_mapping_raw:
-                self._room_map_dict = yaml.safe_load(self._room_mapping_raw) or {}
-            
-            if self._map_mapping_raw:
-                # Map Mapping: { "MapID": "FriendlyName" }
-                self._map_id_dict = yaml.safe_load(self._map_mapping_raw) or {}
-                # Invert it for lookup: { "FriendlyName": "MapID" }
-                self._map_name_to_id = {v.lower(): k for k, v in self._map_id_dict.items()}
-            else:
-                self._map_name_to_id = {}
-
-        except Exception as e:
-            _LOGGER.error("Failed to parse YAML mappings: %s", e)
+        # 1. New structured format
+        structured_maps = item.get("structured_maps", {})
+        _LOGGER.debug("Initializing Rosie with structured_maps: %s", structured_maps)
+        for map_id, mdata in structured_maps.items():
+            map_name = mdata.get("name", str(map_id))
+            self._map_name_to_id[map_name.lower()] = str(map_id)
+            self._room_map_dict[map_name] = {str(rid): str(rname) for rid, rname in mdata.get("rooms", {}).items()}
+        _LOGGER.debug("Populated _room_map_dict: %s", self._room_map_dict)
 
         # Initialize the RoboVac connection
         try:
@@ -494,6 +486,10 @@ class RoboVacEntity(StateVacuumEntity):
             self._attr_robovac_supported = self.vacuum.getRoboVacFeatures()
             self._attr_activity_mapping = self.vacuum.getRoboVacActivityMapping()
             self._attr_fan_speed_list = self.vacuum.getFanSpeeds()
+            
+            # 🏠 Native Area Mapping Support: Enable CLEAN_AREA and MAP if room mappings are provided
+            if self._room_map_dict:
+                self._attr_supported_features |= VacuumEntityFeature.CLEAN_AREA | VacuumEntityFeature.MAP
 
             _LOGGER.debug(
                 "Vacuum %s supports features: %s",
@@ -1081,6 +1077,34 @@ class RoboVacEntity(StateVacuumEntity):
             # and the vacuum ignores the start command.
             await asyncio.sleep(1)
             await self.vacuum.async_set({TuyaCodes.START_PAUSE: True})
+
+    @property
+    def segments(self) -> list[Segment] | None:
+        """Return the segments of the vacuum."""
+        # This property is used by some versions of Home Assistant
+        # to display the area mapping UI.
+        segments = []
+        if not self._room_map_dict:
+            return None
+
+        for map_name, rooms in self._room_map_dict.items():
+            map_id = self._map_name_to_id.get(map_name.lower(), map_name)
+            for room_id, room_name in rooms.items():
+                segments.append(
+                    Segment(
+                        id=f"{map_id}:{room_id}",
+                        name=room_name,
+                        group=map_name
+                    )
+                )
+        return segments
+
+    async def async_get_segments(self) -> list[Segment]:
+        """Get the segments that can be cleaned."""
+        # Fallback to the property logic
+        res = self.segments
+        _LOGGER.debug("async_get_segments called. Returning: %s", res)
+        return res or []
 
     async def async_clean_room(self, map_name: str, room_name: str, count: int = 1) -> None:
         """Service call to clean a specific room by name."""

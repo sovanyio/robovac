@@ -38,13 +38,41 @@
                 "title": "Edit vacuum",
                 "data": {
                     "autodiscovery": "Enable autodiscovery",
-                    "ip_address": "IP Address"
+                    "ip_address": "IP Address",
+                    "action": "Mapping Configuration"
                 },
                 "data_description": {
                     "autodiscovery": "Automatically find the vacuum on the network.",
-                    "ip_address": "The static IP address of your vacuum on your local network (optional if autodiscovery is enabled)."
-                },
-                "description": "Autodiscovery will automatically update the IP address"
+                    "ip_address": "The static IP address of your vacuum on your local network (optional if autodiscovery is enabled).",
+                    "action": "Choose whether to save your settings or manage your map and room ID mappings."
+                }
+            },
+            "manage_maps": {
+                "title": "Manage Maps",
+                "data": {
+                    "action": "Map Action"
+                }
+            },
+            "edit_map": {
+                "title": "Edit Map",
+                "data": {
+                    "map_id": "Map ID",
+                    "map_name": "Map Name",
+                    "manage_rooms": "Manage Rooms for this Map"
+                }
+            },
+            "manage_rooms": {
+                "title": "Manage Rooms",
+                "data": {
+                    "action": "Room Action"
+                }
+            },
+            "edit_room": {
+                "title": "Edit Room",
+                "data": {
+                    "room_id": "Room ID",
+                    "room_name": "Room Name"
+                }
             }
         }
     }

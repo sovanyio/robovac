@@ -37,14 +37,42 @@
             "edit": {
                 "title": "Stofzuiger bewerken",
                 "data": {
-                    "autodiscovery": "Automatische detectie inschakelen",
-                    "ip_address": "IP-adres"
+                    "autodiscovery": "Autodiscovery inschakelen",
+                    "ip_address": "IP-adres",
+                    "action": "Kaartconfiguratie"
                 },
                 "data_description": {
                     "autodiscovery": "Vind de stofzuiger automatisch op het netwerk.",
-                    "ip_address": "Het statische IP-adres van uw stofzuiger op uw lokale netwerk (optioneel als automatische detectie is ingeschakeld)."
-                },
-                "description": "Automatische detectie zal het IP-adres automatisch bijwerken"
+                    "ip_address": "Het statische IP-adres van uw stofzuiger op uw lokale netwerk (optioneel als autodiscovery is ingeschakeld).",
+                    "action": "Kies of u uw instellingen wilt opslaan of uw kaart- en kamer-ID-toewijzingen wilt beheren."
+                }
+            },
+            "manage_maps": {
+                "title": "Kaarten beheren",
+                "data": {
+                    "action": "Kaartactie"
+                }
+            },
+            "edit_map": {
+                "title": "Kaart bewerken",
+                "data": {
+                    "map_id": "Kaart-ID",
+                    "map_name": "Kaartnaam",
+                    "manage_rooms": "Kamers voor deze kaart beheren"
+                }
+            },
+            "manage_rooms": {
+                "title": "Kamers beheren",
+                "data": {
+                    "action": "Kameractie"
+                }
+            },
+            "edit_room": {
+                "title": "Kamer bewerken",
+                "data": {
+                    "room_id": "Kamer-ID",
+                    "room_name": "Kamernaam"
+                }
             }
         }
     }

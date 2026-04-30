@@ -38,13 +38,42 @@
                 "title": "Editar aspiradora",
                 "data": {
                     "autodiscovery": "Habilitar autodescubrimiento",
-                    "ip_address": "Dirección IP"
+                    "ip_address": "Dirección IP",
+                    "action": "Configuración de mapeo"
                 },
                 "data_description": {
                     "autodiscovery": "Encontrar automáticamente la aspiradora en la red.",
-                    "ip_address": "La dirección IP estática de su aspiradora en su red local (opcional si el autodescubrimiento está habilitado)."
+                    "ip_address": "La dirección IP estática de su aspiradora en su red local (opcional si el autodescubrimiento está habilitado).",
+                    "action": "Elija si desea guardar su configuración o gestionar sus asignaciones de ID de mapa y habitación."
                 },
                 "description": "El autodescubrimiento actualizará automáticamente la dirección IP"
+            },
+            "manage_maps": {
+                "title": "Gestionar mapas",
+                "data": {
+                    "action": "Acción de mapa"
+                }
+            },
+            "edit_map": {
+                "title": "Editar mapa",
+                "data": {
+                    "map_id": "ID de mapa",
+                    "map_name": "Nombre del mapa",
+                    "manage_rooms": "Gestionar habitaciones para este mapa"
+                }
+            },
+            "manage_rooms": {
+                "title": "Gestionar habitaciones",
+                "data": {
+                    "action": "Acción de habitación"
+                }
+            },
+            "edit_room": {
+                "title": "Editar habitación",
+                "data": {
+                    "room_id": "ID de habitación",
+                    "room_name": "Nombre de la habitación"
+                }
             }
         }
     }

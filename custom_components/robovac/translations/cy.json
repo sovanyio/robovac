@@ -38,13 +38,41 @@
                 "title": "Golygu sugnwr llwch",
                 "data": {
                     "autodiscovery": "Galluogi awto-ddarganfod",
-                    "ip_address": "Cyfeiriad IP"
+                    "ip_address": "Cyfeiriad IP",
+                    "action": "Ffurfweddiad Mapio"
                 },
                 "data_description": {
                     "autodiscovery": "Dod o hyd i'r sugnwr llwch yn awtomatig ar y rhwydwaith.",
-                    "ip_address": "Cyfeiriad IP statig eich sugnwr llwch ar eich rhwydwaith lleol (dewisol os yw awto-ddarganfod wedi'i alluogi)."
-                },
-                "description": "Bydd awto-ddarganfod yn diweddaru'r cyfeiriad IP yn awtomatig"
+                    "ip_address": "Cyfeiriad IP statig eich sugnwr llwch ar eich rhwydwaith lleol (dewisol os yw awto-ddarganfod wedi'i alluogi).",
+                    "action": "Dewiswch a ydych am gadw eich gosodiadau neu reoli eich mapiau ac IDau ystafell."
+                }
+            },
+            "manage_maps": {
+                "title": "Rheoli Mapiau",
+                "data": {
+                    "action": "Gweithred Map"
+                }
+            },
+            "edit_map": {
+                "title": "Golygu Map",
+                "data": {
+                    "map_id": "ID Map",
+                    "map_name": "Enw Map",
+                    "manage_rooms": "Rheoli Ystafelloedd ar gyfer y Map hwn"
+                }
+            },
+            "manage_rooms": {
+                "title": "Rheoli Ystafelloedd",
+                "data": {
+                    "action": "Gweithred Ystafell"
+                }
+            },
+            "edit_room": {
+                "title": "Golygu Ystafell",
+                "data": {
+                    "room_id": "ID Ystafell",
+                    "room_name": "Enw Ystafell"
+                }
             }
         }
     }

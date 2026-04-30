@@ -46,7 +46,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 
-from .const import CONF_AUTODISCOVERY, CONF_VACS, DOMAIN, CONF_ROOMS, CONF_MAPS
+from .const import CONF_AUTODISCOVERY, CONF_VACS, DOMAIN
 from .countries import (
     get_phone_code_by_country_code,
     get_phone_code_by_region,
@@ -247,6 +247,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self.selected_vacuum = None
+        self.selected_map_id = None
+        self.selected_room_id = None
+        self._vacuums = deepcopy(config_entry.data.get(CONF_VACS, {}))
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
@@ -272,50 +275,161 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_edit(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the edit step."""
         errors: dict[str, str] = {}
-
-        vacuums = self.config_entry.data[CONF_VACS]
+        vacuum = self._vacuums[self.selected_vacuum]
 
         if user_input is not None:
-            updated_vacuums = deepcopy(vacuums)
-            updated_vacuums[self.selected_vacuum][CONF_AUTODISCOVERY] = user_input[
-                CONF_AUTODISCOVERY
-            ]
-            if user_input[CONF_IP_ADDRESS]:
-                updated_vacuums[self.selected_vacuum][CONF_IP_ADDRESS] = user_input[
-                    CONF_IP_ADDRESS
-                ]
+            # Handle Navigation
+            action = user_input.get("action")
             
-            updated_vacuums[self.selected_vacuum][CONF_ROOMS] = user_input.get(CONF_ROOMS, "")
-            updated_vacuums[self.selected_vacuum][CONF_MAPS] = user_input.get(CONF_MAPS, "")
+            # Save basic settings
+            vacuum[CONF_AUTODISCOVERY] = user_input[CONF_AUTODISCOVERY]
+            if user_input.get(CONF_IP_ADDRESS):
+                vacuum[CONF_IP_ADDRESS] = user_input[CONF_IP_ADDRESS]
 
+            if action == "manage_maps":
+                return await self.async_step_manage_maps()
+            
+            # Final Save
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
-                data={CONF_VACS: updated_vacuums},
+                data={CONF_VACS: self._vacuums},
             )
+            return self.async_create_entry(title="", data={})
 
-            return self.async_create_entry(title="", data={})  # type: ignore[return-value]
-
-        options_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_AUTODISCOVERY,
-                    default=vacuums[self.selected_vacuum].get(CONF_AUTODISCOVERY, True),
-                ): bool,
-                vol.Optional(
-                    CONF_IP_ADDRESS,
-                    default=vacuums[self.selected_vacuum].get(CONF_IP_ADDRESS),
-                ): str,
-                vol.Optional(
-                    CONF_MAPS,
-                    default=vacuums[self.selected_vacuum].get(CONF_MAPS, ""),
-                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-                vol.Optional(
-                    CONF_ROOMS,
-                    default=vacuums[self.selected_vacuum].get(CONF_ROOMS, ""),
-                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            }
-        )
+        options_schema = vol.Schema({
+            vol.Required(CONF_AUTODISCOVERY, default=vacuum.get(CONF_AUTODISCOVERY, True)): bool,
+            vol.Optional(CONF_IP_ADDRESS, default=vacuum.get(CONF_IP_ADDRESS)): str,
+            vol.Required("action", default="save"): vol.In({
+                "save": "Save and Exit",
+                "manage_maps": "Manage Map & Room ID Mappings"
+            })
+        })
 
         return self.async_show_form(
             step_id="edit", data_schema=options_schema, errors=errors
-        )  # type: ignore[return-value]
+        )
+
+    async def async_step_manage_maps(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step to list and manage maps."""
+        vacuum = self._vacuums[self.selected_vacuum]
+        maps = vacuum.get("structured_maps", {})
+
+        if user_input is not None:
+            action = user_input.get("action")
+            if action == "add":
+                self.selected_map_id = None
+                return await self.async_step_edit_map()
+            elif action == "back":
+                return await self.async_step_edit()
+            elif action.startswith("edit_"):
+                self.selected_map_id = action.split("edit_")[1]
+                return await self.async_step_edit_map()
+            elif action.startswith("delete_"):
+                map_id = action.split("delete_")[1]
+                if map_id in maps:
+                    del maps[map_id]
+                return await self.async_step_manage_maps()
+
+        # Build map list for selection
+        map_options = {"add": "Add New Map", "back": "<< Back to Basic Settings"}
+        for mid, mdata in maps.items():
+            map_options[f"edit_{mid}"] = f"Edit Map: {mdata['name']} (ID: {mid})"
+            map_options[f"delete_{mid}"] = f"Delete Map: {mdata['name']}"
+
+        return self.async_show_form(
+            step_id="manage_maps",
+            data_schema=vol.Schema({
+                vol.Required("action"): vol.In(map_options)
+            })
+        )
+
+    async def async_step_edit_map(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step to edit a specific map's details."""
+        vacuum = self._vacuums[self.selected_vacuum]
+        maps = vacuum.setdefault("structured_maps", {})
+        
+        current_map = maps.get(self.selected_map_id, {"name": "", "rooms": {}}) if self.selected_map_id else {"name": "", "rooms": {}}
+
+        if user_input is not None:
+            map_id = user_input["map_id"]
+            map_name = user_input["map_name"]
+            
+            # If we renamed the ID, move the data
+            if self.selected_map_id and self.selected_map_id != map_id:
+                maps[map_id] = maps.pop(self.selected_map_id)
+            
+            maps[map_id] = {
+                "name": map_name,
+                "rooms": maps.get(map_id, {}).get("rooms", {})
+            }
+            self.selected_map_id = map_id
+            
+            if user_input.get("manage_rooms"):
+                return await self.async_step_manage_rooms()
+            
+            return await self.async_step_manage_maps()
+
+        schema = vol.Schema({
+            vol.Required("map_id", default=self.selected_map_id or ""): str,
+            vol.Required("map_name", default=current_map["name"]): str,
+            vol.Optional("manage_rooms", default=False): bool,
+        })
+
+        return self.async_show_form(step_id="edit_map", data_schema=schema)
+
+    async def async_step_manage_rooms(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step to list and manage rooms for a specific map."""
+        vacuum = self._vacuums[self.selected_vacuum]
+        mdata = vacuum["structured_maps"][self.selected_map_id]
+        rooms = mdata.setdefault("rooms", {})
+
+        if user_input is not None:
+            action = user_input.get("action")
+            if action == "add":
+                self.selected_room_id = None
+                return await self.async_step_edit_room()
+            elif action == "back":
+                return await self.async_step_edit_map()
+            elif action.startswith("edit_"):
+                self.selected_room_id = action.split("edit_")[1]
+                return await self.async_step_edit_room()
+            elif action.startswith("delete_"):
+                room_id = action.split("delete_")[1]
+                if room_id in rooms:
+                    del rooms[room_id]
+                return await self.async_step_manage_rooms()
+
+        room_options = {"add": "Add New Room", "back": f"<< Back to Map: {mdata['name']}"}
+        for rid, rname in rooms.items():
+            room_options[f"edit_{rid}"] = f"Edit Room: {rname} (ID: {rid})"
+            room_options[f"delete_{rid}"] = f"Delete Room: {rname}"
+
+        return self.async_show_form(
+            step_id="manage_rooms",
+            data_schema=vol.Schema({
+                vol.Required("action"): vol.In(room_options)
+            })
+        )
+
+    async def async_step_edit_room(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Step to edit a specific room's details."""
+        vacuum = self._vacuums[self.selected_vacuum]
+        mdata = vacuum["structured_maps"][self.selected_map_id]
+        rooms = mdata["rooms"]
+
+        if user_input is not None:
+            room_id = user_input["room_id"]
+            room_name = user_input["room_name"]
+            
+            if self.selected_room_id and self.selected_room_id != room_id:
+                rooms.pop(self.selected_room_id)
+            
+            rooms[room_id] = room_name
+            return await self.async_step_manage_rooms()
+
+        schema = vol.Schema({
+            vol.Required("room_id", default=self.selected_room_id or ""): str,
+            vol.Required("room_name", default=rooms.get(self.selected_room_id, "")): str,
+        })
+
+        return self.async_show_form(step_id="edit_room", data_schema=schema)
